@@ -202,9 +202,10 @@ DWORD WINAPI IOCPServer::_WorkerThread(LPVOID lpParam)
 		if (!bReturn)
 		{
 			DWORD dwErr = GetLastError();
-
+			// 读取传入的参数
+			PER_IO_CONTEXT* pIoContext = CONTAINING_RECORD(pOverlapped, PER_IO_CONTEXT, m_Overlapped);
 			// 显示一下提示信息
-			if (!pIOCPServer->HandleError(pSocketContext, dwErr))
+			if (!pIOCPServer->HandleError(pSocketContext, pIoContext, dwErr))
 			{
 				break;
 			}
@@ -604,6 +605,7 @@ bool IOCPServer::_DoAccpetLogin(PER_SOCKET_CONTEXT* pSocketContext, PER_IO_CONTE
 	////////////////////////////////////////////////////////////////////////////////////////////////
 	// 5. 使用完毕之后，把Listen Socket的那个IoContext重置，然后准备投递新的AcceptEx
 	pIoContext->ResetBuffer();
+	pIoContext->m_sockAccept = INVALID_SOCKET;// 不然会把新建立的socket关闭掉。
 	return this->_PostAccept(pIoContext);
 }
 
@@ -616,6 +618,12 @@ bool IOCPServer::_PostAccept(PER_IO_CONTEXT* pAcceptIoContext)
 	pAcceptIoContext->m_OpType = ACCEPT_LOGIN;
 	WSABUF *p_wbuf = &pAcceptIoContext->m_wsaBuf;
 	OVERLAPPED *p_ol = &pAcceptIoContext->m_Overlapped;
+	//客户端连接，未发送数据，直接关闭
+	if (INVALID_SOCKET != pAcceptIoContext->m_sockAccept)
+	{
+		closesocket(pAcceptIoContext->m_sockAccept);
+		pAcceptIoContext->m_sockAccept = INVALID_SOCKET;
+	}
 
 	// 为以后新连入的客户端先准备好Socket( 这个是与传统accept最大的区别 ) 
 	pAcceptIoContext->m_sockAccept = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_OVERLAPPED);
@@ -865,17 +873,17 @@ void IOCPServer::_ClearContextList()
 	LeaveCriticalSection(&m_csClientSockContext);
 }
 
-bool IOCPServer::HandleError(PER_SOCKET_CONTEXT *pContext, const DWORD& dwErr)
+bool IOCPServer::HandleError(PER_SOCKET_CONTEXT *pSockContext, PER_IO_CONTEXT* pIoContext, const DWORD& dwErr)
 {
 	// 如果是超时了，就再继续等吧  
 	if (WAIT_TIMEOUT == dwErr)
 	{
 		// 确认客户端是否还活着...，
 		//一般不会进入这个，因为GetQueuedCompletionStatus设置时间参数是INFINITE,阻塞式客户端，通过这种方式无法检查网线拔掉情况。
-		if (!_IsSocketAlive(pContext->m_Socket))
+		if (!_IsSocketAlive(pSockContext->m_Socket))
 		{
 			Loger(LEVEL_ERROR, "检测到客户端异常退出！");
-			this->_RemoveContext(pContext);
+			this->_RemoveContext(pSockContext);
 			return true;
 		}
 		else
@@ -888,11 +896,16 @@ bool IOCPServer::HandleError(PER_SOCKET_CONTEXT *pContext, const DWORD& dwErr)
 	// 可能是客户端异常退出了
 	else if (ERROR_NETNAME_DELETED == dwErr)
 	{
-		//this->_ShowMessage(_T("检测到客户端异常退出！"));
+		// 客户端关闭，还没有发数据就断开了
+		Loger(LEVEL_ERROR, "客户端：%s:%d 异常退出,交互终止！%s", inet_ntoa(pSockContext->m_ClientAddr.sin_addr), ntohs(pSockContext->m_ClientAddr.sin_port), perro("", WSAGetLastError()).c_str());
+		if (pSockContext->m_Socket == m_pListenContext->m_Socket)
+		{
+			this->_PostAccept(pIoContext);
+		}
 		// 信息输出
-		Loger(LEVEL_ERROR, "客户端：%s:%d 异常退出,下载终止！%s", inet_ntoa(pContext->m_ClientAddr.sin_addr), ntohs(pContext->m_ClientAddr.sin_port), perro("", WSAGetLastError()).c_str());
-		m_pMessageDlg->ShowMessage("客户端：%s:%d 异常退出,下载终止！", inet_ntoa(pContext->m_ClientAddr.sin_addr), ntohs(pContext->m_ClientAddr.sin_port));
-		this->_RemoveContext(pContext);
+
+		m_pMessageDlg->ShowMessage("客户端：%s:%d 异常退出,交互终止！", inet_ntoa(pSockContext->m_ClientAddr.sin_addr), ntohs(pSockContext->m_ClientAddr.sin_port));
+		this->_RemoveContext(pSockContext);
 		return true;
 	}
 
@@ -901,7 +914,7 @@ bool IOCPServer::HandleError(PER_SOCKET_CONTEXT *pContext, const DWORD& dwErr)
 		//this->_ShowMessage(_T("完成端口操作出现错误，线程退出。错误代码：%d"), dwErr);
 		// 如：网线被拔掉
 		Loger(LEVEL_ERROR, "完成端口操作出现错误.%s", perro("", WSAGetLastError()).c_str());
-		this->_RemoveContext(pContext);
+		this->_RemoveContext(pSockContext);
 		return false;
 	}
 

@@ -252,7 +252,7 @@ private:
 	void _ClearContextList();
 
 	// 处理完成端口上的错误
-	bool HandleError(PER_SOCKET_CONTEXT *pContext, const DWORD& dwErr);
+	bool HandleError(PER_SOCKET_CONTEXT *pContext, PER_IO_CONTEXT* pIoContext, const DWORD& dwErr);
 
 		// 判断客户端Socket是否已经断开
 	bool _IsSocketAlive(SOCKET s);

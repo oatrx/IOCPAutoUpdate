@@ -30,6 +30,6 @@
 // Windows 头文件: 
 #include <windows.h>
 
-
+//#define _AFXDLL
 
 // TODO:  在此处引用程序需要的其他头文件

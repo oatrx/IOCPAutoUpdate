@@ -172,8 +172,9 @@ typedef struct _tagThreadParams
 typedef struct _tagProgramInfo
 {
 	char szProgramName[PROGRAM_INFO_LEN];		// 程序起的名字
-	char szProgramVersion[PROGRAM_INFO_LEN];	// 程序版本号
+	//char szProgramVersion[PROGRAM_INFO_LEN];	// 程序版本号
 	char szFullPath[PROGRAM_INFO_LEN];			// 程序文件的全路径
+	uint32_t dwProgramVersion;					// 程序版本号
 }PROGRAMINFO;
 
 
@@ -252,7 +253,7 @@ private:
 	void _ClearContextList();
 
 	// 处理完成端口上的错误
-	bool HandleError(PER_SOCKET_CONTEXT *pContext, PER_IO_CONTEXT* pIoContext, const DWORD& dwErr);
+	bool HandleError(PER_SOCKET_CONTEXT *pSocketContext, PER_IO_CONTEXT* pIoContext, const DWORD& dwErr);
 
 		// 判断客户端Socket是否已经断开
 	bool _IsSocketAlive(SOCKET s);

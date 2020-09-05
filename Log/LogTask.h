@@ -6,7 +6,7 @@
 class LogTask
 {
 protected:
-	void log_write();
+    void log_write_thread();
     static void start(LogTask* plog);
 	virtual void run() = 0;
     LogTask();

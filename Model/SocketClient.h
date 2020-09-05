@@ -25,11 +25,12 @@ typedef struct _USER {
 typedef struct _tagClientProgramInfo
 {
 	char szProgramName[INFO_LEN];		// 程序起的名字
-	char szProgramVersion[INFO_LEN];	// 程序版本号
 	char szFilePath[INFO_LEN];			// 程序文件的下载路径
 	char szFileName[INFO_LEN];			// 程序文件名称(包括后缀)
-	uint32_t dwFileSize;				// 程序文件的大小
-	uint32_t dwLeftLen;					// 接收时候，剩余的大小
+	uint32_t dwFileSize;				// 程序文件的大小(字节Byte)
+	uint32_t dwLeftLen;					// 接收时候，剩余的大小(字节Byte)
+	uint32_t dwOldVersion;			// 程序版本号
+	uint32_t dwNewVersion;				// 程序的新版本号
 	bool bStopDownLoad;					// 停止下载
 	bool bSocketError;					// 连接出错
 	bool bDownLoadFinish;				// 收到下载完成消息
@@ -44,14 +45,20 @@ public:
 	// 加载socket库
 	bool LoadSockLib();
 
+	// 库加载是否成功
+	bool IsLibLoaded();
+
 	// 卸载socket库
 	void UnloadSockLib();
 
-	// 读取配置信息
-	bool ReadConfig();
+	// 读取配置信息,要管理的程序文件szAppName,配置文件中[]中间的字符串
+	bool ReadConfig(const char*  pAppName);
 
-	//客户端初始化，连接服务器
-	bool start();
+	// 程序文件下载成功，把配置文件中的对应版本号更新一下。
+	void UpdateProgramInfo(const char*  pAppName);
+
+	//客户端初始化，连接服务器。pAppName 对应于配置文件中[PROGRAM]的PROGRAM字符串
+	bool start(const char* pAppName);
 
 	// 停止客户端，关闭socket
 	void stop();
@@ -60,7 +67,7 @@ public:
 	bool Login();
 
 	//2 检查版本信息.
-	// 返回值：-1 发送下载命令失败，没有更新；-2 更新文件已下载；0 有新版本可供下载。
+	// 返回值：-1 发送版本信息给服务器失败或者没有新版本；-2 更新文件已下载；0 有新版本可供下载。
 	int32_t ProgramVer();
 
 	//3 是否需要更新,入参true下载，false不下载。
@@ -75,6 +82,12 @@ public:
 	// 获取下载文件的完整路径
 	std::string GetFullFilePath();
 
+	// 获取下载文件的项目名称
+	std::string GetProgramName();
+
+	// 获取文件的版本号。下载成功后则是新下载下来文件的版本号，否则是之前读取配置时候的文件版本号
+	uint32_t GetFileVersion();
+
 	// 获取下载剩余的百分比
 	int32_t GetDownLoadLeftPercent();
 	
@@ -88,6 +101,9 @@ public:
 	void StopDownLoad(bool bStopDownLoad = true);
 
 private:
+	// 创建默认的配置文件
+	void CreateDefaultConfig(const char* pAppName, const char* szConfigFilePath);
+
 	// 下载完成确认信息
 	bool DownLoadFinish();
 

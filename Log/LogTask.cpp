@@ -1,25 +1,20 @@
-﻿#include "stdafx.h"
+﻿#include <stdafx.h>
 #include "LogTask.h"
 
 LogTask::LogTask()
-	:m_pThread(NULL)
+	:m_pThread(nullptr)
 {
 }
 
 
 LogTask::~LogTask()
 {
-	if (m_pThread != NULL)
-	{
-		m_pThread->join();
-		delete m_pThread;
-		m_pThread = NULL;
-	}
 }
 
-void LogTask::log_write()
+void LogTask::log_write_thread()
 {
 	m_pThread = new std::thread(start, this);
+    m_pThread->detach();
 }
 
 void LogTask::start(LogTask* pLog)

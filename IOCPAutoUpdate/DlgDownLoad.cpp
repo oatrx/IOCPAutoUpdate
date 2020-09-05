@@ -39,6 +39,8 @@ void CDlgDownLoad::DoDataExchange(CDataExchange* pDX)
 BEGIN_MESSAGE_MAP(CDlgDownLoad, CDialog)
 	ON_WM_CLOSE()
 	ON_WM_TIMER()
+	ON_WM_PAINT()
+	ON_WM_CTLCOLOR()
 END_MESSAGE_MAP()
 
 
@@ -49,6 +51,8 @@ void CDlgDownLoad::OnClose()
 {
 	// TODO: 在此添加消息处理程序代码和/或调用默认值
 	m_pSockClient->StopDownLoad();
+	// 关闭socket
+	m_pSockClient->stop();
 	KillTimer(1);
 	KillTimer(2);
 	CDialog::OnClose();
@@ -64,7 +68,7 @@ void CDlgDownLoad::OnTimer(UINT_PTR nIDEvent)
 		m_progressDownLoad.SetPos(nDownLoadPercent);
 		m_strDownLoadPercent.Format("%d", nDownLoadPercent);
 		if (m_pSockClient->IsSocketError())
-			m_strErrorInfo.Format("网络连接错误！");
+			m_strErrorInfo.Format("网络连接出错！");
 		if (m_pSockClient->IsDownLoadFinish())
 		{
 			m_strErrorInfo.Format("下载完成！");
@@ -79,7 +83,7 @@ void CDlgDownLoad::OnTimer(UINT_PTR nIDEvent)
 		m_nBeforeCount = m_nLaterCount;
 		DWORD _nCurrentLeftSize = m_pSockClient->GetDownLoadLeftSize();
 		// 实时下载速度
-		double v = (double)(m_nLastDownLoadLeftSize - _nCurrentLeftSize) / time / 1024; // 换算成kb/s
+		double v = (double)(m_nLastDownLoadLeftSize - _nCurrentLeftSize) / time / 1024; // 换算成kB/s
 		m_nLastDownLoadLeftSize = _nCurrentLeftSize;
 		if ((int)v > 1024)
 		{
@@ -88,7 +92,7 @@ void CDlgDownLoad::OnTimer(UINT_PTR nIDEvent)
 		}
 		else
 		{
-			m_strDownLoadSpeed.Format("%0.2lf kb/s", v);
+			m_strDownLoadSpeed.Format("%0.2lf kB/s", v);
 		}
 	}
 	UpdateData(FALSE);
@@ -109,6 +113,47 @@ BOOL CDlgDownLoad::OnInitDialog()
 	// 下载的文件大小
 	m_strFileSize.Format("%0.2lf", m_pSockClient->GetFileSize());
 	m_nLastDownLoadLeftSize = m_pSockClient->GetDownLoadLeftSize();
+
+	// 黑色的刷子
+	m_brushControl.CreateSolidBrush(RGB(0, 0, 0));
+
 	return TRUE;  // return TRUE unless you set the focus to a control
 				  // 异常: OCX 属性页应返回 FALSE
+}
+
+
+void CDlgDownLoad::OnPaint()
+{
+	CPaintDC dc(this); // device context for painting
+					   // TODO: 在此处添加消息处理程序代码
+					   // 不为绘图消息调用 CDialog::OnPaint()
+	// 背景刷成黑色
+	CRect rect;
+	GetClientRect(rect);
+	dc.FillSolidRect(rect, RGB(0, 0, 0));// 黑色
+
+	CDialog::OnPaint();
+}
+
+
+HBRUSH CDlgDownLoad::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
+{
+	HBRUSH hbr = CDialog::OnCtlColor(pDC, pWnd, nCtlColor);
+
+	// TODO:  在此更改 DC 的任何特性
+	
+	// 所有控件设置成白字 透明底
+	if ((nCtlColor == CTLCOLOR_STATIC) &&
+		(pWnd->GetDlgCtrlID() == IDC_STATIC_FILE || pWnd->GetDlgCtrlID() == IDC_FILE_SIZE || pWnd->GetDlgCtrlID() == IDC_STATIC_UNIT ||
+		 pWnd->GetDlgCtrlID() == IDC_STATIC_DOWN_PERCENT || pWnd->GetDlgCtrlID() == IDC_DOWDLOAD_PERCENT || pWnd->GetDlgCtrlID() == IDC_STATIC_PERCENT_UINT ||
+		 pWnd->GetDlgCtrlID() == IDC_STATIC_SPEED || pWnd->GetDlgCtrlID() == IDC_DOWNLOAD_SPEED ||
+		 pWnd->GetDlgCtrlID() == IDC_ERROR_INFO))
+	{
+		pDC->SetTextColor(RGB(255, 255, 255));
+		pDC->SetBkMode(TRANSPARENT);
+		hbr=(HBRUSH)m_brushControl;
+	}
+
+	// TODO:  如果默认的不是所需画笔，则返回另一个画笔
+	return hbr;
 }

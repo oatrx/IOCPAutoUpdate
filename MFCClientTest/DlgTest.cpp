@@ -12,7 +12,7 @@
 IMPLEMENT_DYNAMIC(CDlgTest, CDialog)
 
 CDlgTest::CDlgTest(CWnd* pParent /*=NULL*/)
-	: CDialog(IDD_DIALOG1, pParent)
+	: CDialog(IDD_MFCCLIENTTEST_DIALOG, pParent)
 {
 
 }

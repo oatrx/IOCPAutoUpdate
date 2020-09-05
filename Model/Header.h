@@ -36,7 +36,7 @@ typedef struct _tagUpdateLoginRet {
 #define  UPDATE_NET_CMD_PROGRAM_VER 0x00000002
 typedef struct _tagUpdateProgramVer{
 	CHAR szProgramName[128];	//原始程序名称
-	CHAR szVer[128];		//原始程序版本信息
+	uint32_t dwVer;				//原始程序版本信息
 }sPROGRAMVER, *LPsPROGRAMVER;
 
 
@@ -44,7 +44,7 @@ typedef struct _tagUpdateProgramVer{
 typedef struct _tag_tagUpdateProgramVerRet {
 	CHAR szFileName[128];	//程序文件名称
 	uint32_t dwFileSize;	//文件长度
-	uint32_t dwNewVer; // 是否有新版本
+	uint32_t dwNewVer;		//服务器上文件的版本号。如果比客户端的更高，则是服务器上的版本号。如果比客户端的版本低（或者打开文件失败）则为0.
 }sPROGRAMVERRET, *LPsPROGRAMVERRET;
 
 

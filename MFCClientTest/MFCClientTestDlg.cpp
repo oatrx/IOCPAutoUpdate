@@ -68,6 +68,7 @@ BEGIN_MESSAGE_MAP(CMFCClientTestDlg, CDialogEx)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
 	ON_WM_CREATE()
+	ON_BN_CLICKED(IDC_BUTTON1, &CMFCClientTestDlg::OnClickedButton1)
 END_MESSAGE_MAP()
 
 
@@ -174,4 +175,23 @@ int CMFCClientTestDlg::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	//CTestDialog dlg;
 	//dlg.DoModal();
 	return 0;
+}
+
+
+void CMFCClientTestDlg::OnClickedButton1()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	Client client;
+	bool bRes  = client.DownLoadFile("DTA",true, this->m_hWnd);
+	if (bRes)
+	{
+		AfxMessageBox("下载成功");
+	}
+	char szPath[50];
+	char szName[20];
+	client.GetFullFilePath(szPath,50);
+	client.GetProgramName(szName, 20);
+	uint32_t u1 = client.GetFileVersion();
+
+	client.DownLoadFile("FIRMWARE1", FALSE, nullptr);
 }

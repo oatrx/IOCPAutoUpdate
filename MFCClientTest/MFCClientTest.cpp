@@ -74,13 +74,27 @@ BOOL CMFCClientTestApp::InitInstance()
 	// 例如修改为公司或组织名
 	SetRegistryKey(_T("应用程序向导生成的本地应用程序"));
 
-	Client client;
-	bool bRes  = client.ConnectServer(NULL);
-	if (bRes)
-	{
-		AfxMessageBox("下载成功");
-	}
-	std::string str = client.GetFullFilePath();
+	//Client client;
+	//bool bRes  = client.DownLoadFile("DTA");
+	//if (bRes)
+	//{
+	//	AfxMessageBox("下载成功");
+	//}
+	//char szPath[50];
+	//char szName[20];
+	//client.GetFullFilePath(szPath,50);
+	//client.GetProgramName(szName, 20);
+	//uint32_t u1 = client.GetFileVersion();
+
+	//bRes = client.DownLoadFile("FIRMWARE1", false);
+	//if (bRes)
+	//{
+	//	// 下载成功，不弹出提示框
+	//}
+	////std::string str2 = client.GetFullFilePath();
+	//uint32_t u2 = client.GetFileVersion();
+
+
 
 	CMFCClientTestDlg dlg;
 	m_pMainWnd = &dlg;

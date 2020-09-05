@@ -6,6 +6,7 @@
 #include "tchar.h"
 #include <shlwapi.h>
 #include <MessageDisplay.h>
+#include "verStr2uint32.h"
 //#include "vld.h"
 //#pragma comment(lib, "vld.lib")
 using namespace std;
@@ -44,7 +45,7 @@ IOCPServer::IOCPServer(MessageDisplay* pMessageDlg)
 {
 	// 初始化线程临界区
 	InitializeCriticalSection(&m_csClientSockContext);
-	Log::getInstance().setLogLevel(LEVEL_INFOR);
+	Log::getInstance().init(LEVEL_INFOR, "updateServer");
 }
 
 
@@ -53,7 +54,7 @@ IOCPServer::~IOCPServer()
 	Stop();
 	// 删除客户端列表临界区
 	DeleteCriticalSection(&m_csClientSockContext);
-	Log::getInstance().removeInstance();
+	
 }
 
 bool IOCPServer::LoadSockLib()
@@ -176,7 +177,7 @@ DWORD WINAPI IOCPServer::_WorkerThread(LPVOID lpParam)
 	IOCPServer* pIOCPServer = (IOCPServer*)pParam->pIOCPServer;
 	int nThreadNo = (int)pParam->nThreadNo;
 
-	trace(_T("工作者线程启动，ID: %d.\n"), nThreadNo);
+	Loger(LEVEL_DEBUG, "工作者线程启动，ID: %d.",nThreadNo);
 
 	OVERLAPPED           *pOverlapped = NULL;
 	PER_SOCKET_CONTEXT   *pSocketContext = NULL;
@@ -202,7 +203,6 @@ DWORD WINAPI IOCPServer::_WorkerThread(LPVOID lpParam)
 		if (!bReturn)
 		{
 			DWORD dwErr = GetLastError();
-			// 读取传入的参数
 			PER_IO_CONTEXT* pIoContext = CONTAINING_RECORD(pOverlapped, PER_IO_CONTEXT, m_Overlapped);
 			// 显示一下提示信息
 			if (!pIOCPServer->HandleError(pSocketContext, pIoContext, dwErr))
@@ -227,6 +227,12 @@ DWORD WINAPI IOCPServer::_WorkerThread(LPVOID lpParam)
 				|| DOWNLOAD_DATA == pIoContext->m_OpType
 				|| DOWNLOAD_END == pIoContext->m_OpType))
 			{
+				// 信息输出,客户端连接，没有发数据。又没有走HandleError
+				if (pSocketContext->m_Socket == pIOCPServer->m_pListenContext->m_Socket)
+				{
+					closesocket(pIoContext->m_sockAccept);
+					pIOCPServer->_PostAccept(pIoContext);
+				}
 				Loger(LEVEL_INFOR, "客户端：%s:%d %s", inet_ntoa(pSocketContext->m_ClientAddr.sin_addr), ntohs(pSocketContext->m_ClientAddr.sin_port), perro("断开连接！", WSAGetLastError()).c_str());
 				pIOCPServer->m_pMessageDlg->ShowMessage("客户端：%s:%d 断开连接！", inet_ntoa(pSocketContext->m_ClientAddr.sin_addr), ntohs(pSocketContext->m_ClientAddr.sin_port));
 				// 释放掉对应的资源
@@ -310,15 +316,14 @@ DWORD WINAPI IOCPServer::_WorkerThread(LPVOID lpParam)
 				break;
 				default:
 					// 不应该执行到这里
-					trace(_T("_WorkThread中的 pIoContext->m_OpType 参数异常.\n"));
+					Loger(LEVEL_DEBUG, "_WorkThread中的 pIoContext->m_OpType 参数异常.");
 					break;
 				} //switch
 			}//if
 		}//if
 
 	}//while
-
-	trace(_T("工作者线程 %d 号退出.\n"), nThreadNo);
+	Loger(LEVEL_DEBUG, "工作者线程 %d 号退出.", nThreadNo);
 
 	// 释放线程参数
 	RELEASE(lpParam);
@@ -493,8 +498,7 @@ bool IOCPServer::_InitializeListenSocket()
 			return false;
 		}
 	}
-
-	trace(_T("投递 %d 个AcceptEx请求完毕"), MAX_POST_ACCEPT);
+	Loger(LEVEL_DEBUG, "投递 %d 个AcceptEx请求完毕", MAX_POST_ACCEPT);
 	m_pMessageDlg->ShowMessage("服务器启动！");
 	return true;
 
@@ -605,7 +609,6 @@ bool IOCPServer::_DoAccpetLogin(PER_SOCKET_CONTEXT* pSocketContext, PER_IO_CONTE
 	////////////////////////////////////////////////////////////////////////////////////////////////
 	// 5. 使用完毕之后，把Listen Socket的那个IoContext重置，然后准备投递新的AcceptEx
 	pIoContext->ResetBuffer();
-	pIoContext->m_sockAccept = INVALID_SOCKET;// 不然会把新建立的socket关闭掉。
 	return this->_PostAccept(pIoContext);
 }
 
@@ -618,12 +621,6 @@ bool IOCPServer::_PostAccept(PER_IO_CONTEXT* pAcceptIoContext)
 	pAcceptIoContext->m_OpType = ACCEPT_LOGIN;
 	WSABUF *p_wbuf = &pAcceptIoContext->m_wsaBuf;
 	OVERLAPPED *p_ol = &pAcceptIoContext->m_Overlapped;
-	//客户端连接，未发送数据，直接关闭
-	if (INVALID_SOCKET != pAcceptIoContext->m_sockAccept)
-	{
-		closesocket(pAcceptIoContext->m_sockAccept);
-		pAcceptIoContext->m_sockAccept = INVALID_SOCKET;
-	}
 
 	// 为以后新连入的客户端先准备好Socket( 这个是与传统accept最大的区别 ) 
 	pAcceptIoContext->m_sockAccept = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_OVERLAPPED);
@@ -706,10 +703,10 @@ bool IOCPServer::_DoProgramVersion(PER_SOCKET_CONTEXT* pSocketContext, PER_IO_CO
 		sPROGRAMVER _programVer;
 		memmove(&_programVer, pIoContext->m_wsaBuf.buf + sizeof(_header), sizeof(_programVer));
 		int nCnt = m_mapProName2Info.count(_programVer.szProgramName);
-		// 如果版本号比服务器上的低
-		if (nCnt >0 && 0 < strcmp(m_mapProName2Info[_programVer.szProgramName].szProgramVersion, _programVer.szVer))
+		// 如果客户端版本号比服务器上的低
+		if (nCnt >0 && _programVer.dwVer < m_mapProName2Info[_programVer.szProgramName].dwProgramVersion)
 		{
-			_programVerRet.dwNewVer = 1;
+			_programVerRet.dwNewVer = m_mapProName2Info[_programVer.szProgramName].dwProgramVersion;
 			memmove(pIoContext->m_szProFullPath, m_mapProName2Info[_programVer.szProgramName].szFullPath, strlen(m_mapProName2Info[_programVer.szProgramName].szFullPath));
 			// 获取文件名称
 			string strProgramPath(pIoContext->m_szProFullPath);
@@ -738,7 +735,7 @@ bool IOCPServer::_DoProgramVersion(PER_SOCKET_CONTEXT* pSocketContext, PER_IO_CO
 		}
 	}
 	pIoContext->m_OpType = PROGRAM_VER_RET;
-	pIoContext->m_bNewVersionVerify = (1 == _programVerRet.dwNewVer) ? true : false; // 是否有新版本
+	pIoContext->m_bNewVersionVerify = (_programVerRet.dwNewVer > 0 ) ? true : false; // 是否有新版本
 	// 校验完成，Socket上投递完成。投递版本校验的结果返回请求
 	if (false == this->_PostSend(pIoContext, UPDATE_NET_CMD_PROGRAM_VER_RET, &_programVerRet, sizeof(_programVerRet)))
 	{
@@ -873,17 +870,17 @@ void IOCPServer::_ClearContextList()
 	LeaveCriticalSection(&m_csClientSockContext);
 }
 
-bool IOCPServer::HandleError(PER_SOCKET_CONTEXT *pSockContext, PER_IO_CONTEXT* pIoContext, const DWORD& dwErr)
+bool IOCPServer::HandleError(PER_SOCKET_CONTEXT *pSocketContext, PER_IO_CONTEXT* pIoContext, const DWORD& dwErr)
 {
 	// 如果是超时了，就再继续等吧  
 	if (WAIT_TIMEOUT == dwErr)
 	{
 		// 确认客户端是否还活着...，
 		//一般不会进入这个，因为GetQueuedCompletionStatus设置时间参数是INFINITE,阻塞式客户端，通过这种方式无法检查网线拔掉情况。
-		if (!_IsSocketAlive(pSockContext->m_Socket))
+		if (!_IsSocketAlive(pSocketContext->m_Socket))
 		{
 			Loger(LEVEL_ERROR, "检测到客户端异常退出！");
-			this->_RemoveContext(pSockContext);
+			this->_RemoveContext(pSocketContext);
 			return true;
 		}
 		else
@@ -896,26 +893,24 @@ bool IOCPServer::HandleError(PER_SOCKET_CONTEXT *pSockContext, PER_IO_CONTEXT* p
 	// 可能是客户端异常退出了
 	else if (ERROR_NETNAME_DELETED == dwErr)
 	{
-		// 客户端关闭，还没有发数据就断开了
-		Loger(LEVEL_ERROR, "客户端：%s:%d 异常退出,交互终止！%s", inet_ntoa(pSockContext->m_ClientAddr.sin_addr), ntohs(pSockContext->m_ClientAddr.sin_port), perro("", WSAGetLastError()).c_str());
-		if (pSockContext->m_Socket == m_pListenContext->m_Socket)
+		Loger(LEVEL_ERROR, "客户端：%s:%d 异常退出,下载终止！%s", inet_ntoa(pSocketContext->m_ClientAddr.sin_addr), ntohs(pSocketContext->m_ClientAddr.sin_port), perro("", WSAGetLastError()).c_str());
+		m_pMessageDlg->ShowMessage("客户端：%s:%d 异常退出,下载终止！", inet_ntoa(pSocketContext->m_ClientAddr.sin_addr), ntohs(pSocketContext->m_ClientAddr.sin_port));
+		// 信息输出,客户端连接，但没有发送数据，就直接断掉
+		if (pSocketContext->m_Socket == m_pListenContext->m_Socket)
 		{
-			this->_PostAccept(pIoContext);
+			closesocket(pIoContext->m_sockAccept);
+			_PostAccept(pIoContext);
 		}
-		// 信息输出
-
-		m_pMessageDlg->ShowMessage("客户端：%s:%d 异常退出,交互终止！", inet_ntoa(pSockContext->m_ClientAddr.sin_addr), ntohs(pSockContext->m_ClientAddr.sin_port));
-		this->_RemoveContext(pSockContext);
+		this->_RemoveContext(pSocketContext);
 		return true;
 	}
 
 	else
 	{
-		//this->_ShowMessage(_T("完成端口操作出现错误，线程退出。错误代码：%d"), dwErr);
 		// 如：网线被拔掉
 		Loger(LEVEL_ERROR, "完成端口操作出现错误.%s", perro("", WSAGetLastError()).c_str());
-		this->_RemoveContext(pSockContext);
-		return false;
+		this->_RemoveContext(pSocketContext);
+		return true;
 	}
 
 }
@@ -950,10 +945,10 @@ bool IOCPServer::ReadConfig()
 	char szBuf[nLen] = { 0 };
 	char szConfigPath[nLen] = { 0 };
 	// 检查配置文件是否存在
-	int _res = SearchPath(".\\", "UpdateConfigServer.ini", NULL, nLen, szConfigPath, NULL);
+	int _res = SearchPath(".\\config", "UpdateConfigServer.ini", NULL, nLen, szConfigPath, NULL);
 	if (_res == 0)
 	{
-		Loger(LEVEL_ERROR, perro("没有找到配置文件：UpdateConfigServer.ini", WSAGetLastError()).c_str());
+		Loger(LEVEL_ERROR, perro("没有找到配置文件：UpdateConfigServer.ini", GetLastError()).c_str());
 		return false;
 	}
 	// 读取ip地址和端口号
@@ -969,16 +964,20 @@ bool IOCPServer::ReadConfig()
 	// 读取用户配置
 	for (int i = 1; ; ++i)
 	{
+		int res;
 		sprintf(szAppName,"USER_%d",i);
-		if (0 == GetPrivateProfileString(szAppName, "NAME", "", szBuf, nLen, szConfigPath))
+		// 没有该配置，返回长度为0 也退出，在winows server 2007中出现，没有的配置，GetLastError()返回还是0， 导致死循环
+		if (0 == (res = GetPrivateProfileString(szAppName, "NAME", "", szBuf, nLen, szConfigPath)))
 		{
 			// 没有该配置
-			if(0x02 == GetLastError())
+			if(0x02 == GetLastError() || res == 0)
 				break;
 		}
+		
 		// 没有配置密码，就为空
 		GetPrivateProfileString(szAppName, "PWD", "", szPwd, nLen, szConfigPath);
 		m_mapUser2pwd[szBuf] = szPwd;
+
 	}
 
 	// 读取程序配置之前，把原有的数据清空
@@ -987,14 +986,15 @@ bool IOCPServer::ReadConfig()
 	PROGRAMINFO programInfo = { 0 };
 	for (int i = 1; ; ++i)
 	{
+		int res;
 		sprintf(szAppName, "PROGRAM_%d", i);
 		// 程序名称
-		if (0 == GetPrivateProfileString(szAppName, "NAME", "", programInfo.szProgramName, PROGRAM_INFO_LEN, szConfigPath))
+		if (0 == (res = GetPrivateProfileString(szAppName, "NAME", "", programInfo.szProgramName, PROGRAM_INFO_LEN, szConfigPath)))
 		{
-			// 没有该配置
-			if (0x02 == GetLastError())
+			if (0x02 == GetLastError() || res == 0)
 				break;
 		}
+
 		// 文件路径
 		if (0 == GetPrivateProfileString(szAppName, "FULL_PATH", "", programInfo.szFullPath, PROGRAM_INFO_LEN, szConfigPath))
 		{
@@ -1010,14 +1010,16 @@ bool IOCPServer::ReadConfig()
 			continue;
 		}
 
+		char szProgramVersion[PROGRAM_INFO_LEN];
 		// 版本号
-		if (0 == GetPrivateProfileString(szAppName, "VERSION", "", programInfo.szProgramVersion, PROGRAM_INFO_LEN, szConfigPath))
+		if (0 == GetPrivateProfileString(szAppName, "VERSION", "", szProgramVersion, PROGRAM_INFO_LEN, szConfigPath))
 		{
 			// 没有配置版本号
 			if (0x02 == GetLastError())
 				continue;
 		}
-
+		// 把str类型的版本号转换成数字。便于传输和对比
+		VersionStr2Uint32(szProgramVersion, programInfo.dwProgramVersion);
 		m_mapProName2Info[programInfo.szProgramName] = programInfo;
 	}
 	return true;

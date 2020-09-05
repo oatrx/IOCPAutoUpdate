@@ -60,6 +60,12 @@
     <ClInclude Include="MessageDisplay.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="..\Model\verStr2uint32.h">
+      <Filter>Model</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgTips.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -90,6 +96,12 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="MessageDisplay.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Model\verStr2uint32.cpp">
+      <Filter>Model</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgTips.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

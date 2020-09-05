@@ -28,6 +28,7 @@ bool Server::start(MessageDisplay* pMessageDlg)
 		return false;
 	if (!m_pIOCPServer->Start())
 		return false;
+	return true;
 }
 
 void Server::stop()
